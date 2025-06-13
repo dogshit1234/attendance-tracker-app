@@ -1,0 +1,212 @@
+package com.example.newattendancetracker.viewmodel
+
+import androidx.arch.core.executor.testing.InstantTaskExecutorRule
+import com.example.newattendancetracker.data.model.Attendance
+import com.example.newattendancetracker.data.model.AttendanceStatus
+import com.example.newattendancetracker.data.repository.AttendanceRepository
+import com.example.newattendancetracker.data.repository.UserRepository
+import com.example.newattendancetracker.presentation.viewmodel.AttendanceViewModel
+import com.example.newattendancetracker.presentation.state.AttendanceState
+import io.mockk.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.test.*
+import org.junit.After
+import org.junit.Before
+import org.junit.Rule
+import org.junit.Test
+import org.junit.Assert.*
+import java.util.*
+
+@ExperimentalCoroutinesApi
+class AttendanceViewModelTest {
+    
+    @get:Rule
+    val instantTaskExecutorRule = InstantTaskExecutorRule()
+    
+    private val testDispatcher = StandardTestDispatcher()
+    
+    private lateinit var attendanceRepository: AttendanceRepository
+    private lateinit var userRepository: UserRepository
+    private lateinit var viewModel: AttendanceViewModel
+    
+    @Before
+    fun setup() {
+        Dispatchers.setMain(testDispatcher)
+        attendanceRepository = mockk()
+        userRepository = mockk()
+        viewModel = AttendanceViewModel(attendanceRepository, userRepository)
+    }
+    
+    @After
+    fun tearDown() {
+        Dispatchers.resetMain()
+        unmockkAll()
+    }
+    
+    @Test
+    fun `loadTodayAttendance updates state with attendance data`() = runTest {
+        // Given
+        val userId = "user123"
+        val attendance = Attendance(
+            id = "att123",
+            userId = userId,
+            date = Date(),
+            checkInTime = Date(),
+            status = AttendanceStatus.PRESENT
+        )
+        
+        coEvery { attendanceRepository.getTodayAttendance(userId) } returns attendance
+        
+        // When
+        viewModel.loadTodayAttendance(userId)
+        testDispatcher.scheduler.advanceUntilIdle()
+        
+        // Then
+        val state = viewModel.attendanceState.value
+        assertTrue(state is AttendanceState.Success)
+        assertEquals(attendance, (state as AttendanceState.Success).attendance)
+    }
+    
+    @Test
+    fun `loadTodayAttendance updates state with error when repository fails`() = runTest {
+        // Given
+        val userId = "user123"
+        val errorMessage = "Database error"
+        
+        coEvery { attendanceRepository.getTodayAttendance(userId) } throws Exception(errorMessage)
+        
+        // When
+        viewModel.loadTodayAttendance(userId)
+        testDispatcher.scheduler.advanceUntilIdle()
+        
+        // Then
+        val state = viewModel.attendanceState.value
+        assertTrue(state is AttendanceState.Error)
+        assertEquals("Failed to load attendance", (state as AttendanceState.Error).message)
+    }
+    
+    @Test
+    fun `checkIn succeeds when repository returns success`() = runTest {
+        // Given
+        val userId = "user123"
+        val location = "Office"
+        val latitude = 40.7128
+        val longitude = -74.0060
+        
+        coEvery { 
+            attendanceRepository.checkIn(userId, location, latitude, longitude) 
+        } returns Result.success(Unit)
+        
+        // When
+        viewModel.checkIn(userId, location, latitude, longitude)
+        testDispatcher.scheduler.advanceUntilIdle()
+        
+        // Then
+        val state = viewModel.attendanceState.value
+        assertTrue(state is AttendanceState.Success)
+        coVerify { attendanceRepository.checkIn(userId, location, latitude, longitude) }
+    }
+    
+    @Test
+    fun `checkIn fails when repository returns failure`() = runTest {
+        // Given
+        val userId = "user123"
+        val errorMessage = "Already checked in"
+        
+        coEvery { 
+            attendanceRepository.checkIn(any(), any(), any(), any()) 
+        } returns Result.failure(Exception(errorMessage))
+        
+        // When
+        viewModel.checkIn(userId, "Office", 0.0, 0.0)
+        testDispatcher.scheduler.advanceUntilIdle()
+        
+        // Then
+        val state = viewModel.attendanceState.value
+        assertTrue(state is AttendanceState.Error)
+        assertTrue((state as AttendanceState.Error).message.contains("Check-in failed"))
+    }
+    
+    @Test
+    fun `checkOut succeeds when repository returns success`() = runTest {
+        // Given
+        val userId = "user123"
+        val location = "Office"
+        val latitude = 40.7128
+        val longitude = -74.0060
+        
+        coEvery { 
+            attendanceRepository.checkOut(userId, location, latitude, longitude) 
+        } returns Result.success(Unit)
+        
+        // When
+        viewModel.checkOut(userId, location, latitude, longitude)
+        testDispatcher.scheduler.advanceUntilIdle()
+        
+        // Then
+        val state = viewModel.attendanceState.value
+        assertTrue(state is AttendanceState.Success)
+        coVerify { attendanceRepository.checkOut(userId, location, latitude, longitude) }
+    }
+    
+    @Test
+    fun `loadMonthlyAttendance updates state with monthly data`() = runTest {
+        // Given
+        val userId = "user123"
+        val year = 2024
+        val month = 1
+        val attendanceList = listOf(
+            Attendance(id = "att1", userId = userId, date = Date()),
+            Attendance(id = "att2", userId = userId, date = Date())
+        )
+        
+        every { 
+            attendanceRepository.getMonthlyAttendance(userId, year, month) 
+        } returns flowOf(attendanceList)
+        
+        // When
+        viewModel.loadMonthlyAttendance(userId, year, month)
+        testDispatcher.scheduler.advanceUntilIdle()
+        
+        // Then
+        val state = viewModel.attendanceState.value
+        assertTrue(state is AttendanceState.Success)
+        // Additional assertions for monthly data can be added here
+    }
+    
+    @Test
+    fun `startBreak succeeds when conditions are met`() = runTest {
+        // Given
+        val userId = "user123"
+        
+        coEvery { attendanceRepository.startBreak(userId) } returns Result.success(Unit)
+        
+        // When
+        viewModel.startBreak(userId)
+        testDispatcher.scheduler.advanceUntilIdle()
+        
+        // Then
+        val state = viewModel.attendanceState.value
+        assertTrue(state is AttendanceState.Success)
+        coVerify { attendanceRepository.startBreak(userId) }
+    }
+    
+    @Test
+    fun `endBreak succeeds when conditions are met`() = runTest {
+        // Given
+        val userId = "user123"
+        
+        coEvery { attendanceRepository.endBreak(userId) } returns Result.success(Unit)
+        
+        // When
+        viewModel.endBreak(userId)
+        testDispatcher.scheduler.advanceUntilIdle()
+        
+        // Then
+        val state = viewModel.attendanceState.value
+        assertTrue(state is AttendanceState.Success)
+        coVerify { attendanceRepository.endBreak(userId) }
+    }
+}
