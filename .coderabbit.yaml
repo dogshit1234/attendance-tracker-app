@@ -1,0 +1,28 @@
+# CodeRabbit configuration file
+
+# General settings
+reviews:
+  request_changes_threshold: high  # When to request changes (low, medium, high)
+  high_level_summary: true  # Include a high-level summary
+  auto_review:  
+    enabled: true  # Enable automatic reviews
+    ignore:
+      - "*.md"  # Ignore markdown files
+      - "*.txt"
+      - "LICENSE"
+  
+# Customize the AI model
+model:
+  provider: openai  # AI provider (openai, anthropic, etc.)
+  name: gpt-4  # Model name
+
+# Pull request settings
+pull_requests:
+  open:
+    enabled: true  # Review PRs when opened
+  draft:
+    enabled: false  # Don't review draft PRs
+  
+# Comment settings
+comments:
+  inline: true  # Add inline comments
